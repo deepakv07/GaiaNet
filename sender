@@ -1,0 +1,81 @@
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1
+#define LED_PIN 4
+
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+// -------- Message structure ----------
+struct GaiaMessage {
+  int src;
+  int dest;
+  char body[40];
+};
+
+// -------- Node B ----------
+void nodeB_receive(GaiaMessage msg) {
+  if (msg.dest == 2) {
+    Serial.print("Node B received: ");
+    Serial.println(msg.body);
+
+    // LED blink
+    digitalWrite(LED_PIN, HIGH);
+    delay(200);
+    digitalWrite(LED_PIN, LOW);
+
+    // OLED display
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 0);
+    display.println("GaiaNet Node B");
+    display.println("From Node A:");
+    display.println(msg.body);
+    display.display();
+  }
+}
+
+// -------- Node A ----------
+void nodeA_send() {
+  GaiaMessage msg;
+  msg.src = 1;
+  msg.dest = 2;
+  strcpy(msg.body, "Hello GaiaNet");
+
+  Serial.println("Node A sending...");
+  nodeB_receive(msg);
+}
+
+unsigned long lastSend = 0;
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(LED_PIN, OUTPUT);
+
+  Wire.begin(21, 22);
+
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println("OLED not found");
+    while (true);
+  }
+
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 0);
+  display.println("GaiaNet Booting...");
+  display.display();
+
+  Serial.println("GaiaNet Step 3.5 Ready");
+}
+
+void loop() {
+  if (millis() - lastSend > 3000) {
+    lastSend = millis();
+    nodeA_send();
+  }
+}
