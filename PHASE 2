@@ -1,0 +1,83 @@
+// ===== GaiaNet : Phase 2 - One-to-One Messaging (FINAL, VERIFIED) =====
+
+#include <Arduino.h>
+#include <WiFi.h>
+#include <esp_now.h>
+
+// Unique node identity (auto-generated)
+String NODE_ID;
+
+// Message structure
+typedef struct {
+  char from[16];
+  char message[200];
+} GaiaMessage;
+
+GaiaMessage outgoingMsg;
+
+// Broadcast address (ESP-NOW)
+uint8_t peerAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+
+// ✅ Receive callback
+void onReceive(const esp_now_recv_info *info, const uint8_t *data, int len) {
+  GaiaMessage incomingMsg;
+  memcpy(&incomingMsg, data, sizeof(incomingMsg));
+
+  // ✅ Ignore self-sent messages (NO echo)
+  if (String(incomingMsg.from) == NODE_ID) {
+    return;
+  }
+
+  Serial.print("\n📩 Message from ");
+  Serial.print(incomingMsg.from);
+  Serial.print(": ");
+  Serial.println(incomingMsg.message);
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+
+  WiFi.mode(WIFI_STA);
+
+  // ✅ Generate Node ID (Wokwi-safe)
+  String mac = WiFi.macAddress();
+  mac.replace(":", "");
+  NODE_ID = "GN-" + mac.substring(mac.length() - 4);
+
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("ESP-NOW Init Failed ❌");
+    return;
+  }
+
+  esp_now_register_recv_cb(onReceive);
+
+  esp_now_peer_info_t peerInfo = {};
+  memcpy(peerInfo.peer_addr, peerAddress, 6);
+  peerInfo.channel = 0;
+  peerInfo.encrypt = false;
+  esp_now_add_peer(&peerInfo);
+
+  Serial.println("=================================");
+  Serial.print("GaiaNet Node Ready: ");
+  Serial.println(NODE_ID);
+  Serial.println("Type message & press ENTER");
+  Serial.println("=================================");
+}
+
+void loop() {
+  if (Serial.available()) {
+    String input = Serial.readStringUntil('\n');
+    input.trim();
+
+    if (input.length() > 0) {
+      strcpy(outgoingMsg.from, NODE_ID.c_str());
+      strcpy(outgoingMsg.message, input.c_str());
+
+      esp_now_send(peerAddress, (uint8_t *)&outgoingMsg, sizeof(outgoingMsg));
+
+      Serial.print("📤 Sent: ");
+      Serial.println(input);
+    }
+  }
+}
